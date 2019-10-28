@@ -5,14 +5,18 @@ from pyrep.const import PrimitiveShape
 from pyrep.errors import ConfigurationPathError, IKError
 from pyrep.robots.configuration_paths.arm_configuration_path import ArmConfigurationPath
 from pyrep.objects.dummy import Dummy
+from pyrep.objects.vision_sensor import VisionSensor
 import numpy as np
 import math, time
 from inputs import devices, get_gamepad
 import threading
 from pyquaternion import Quaternion
+from matplotlib import pyplot as plt
+from pyrep.backend import vrep
 
-SCENE_FILE = '/home/pbustos/software/vrep/pollos/pollos.ttt'
+SCENE_FILE = '/home/pbustos/software/vrep-simulator/pollos/pollos.ttt'
 POS_MIN, POS_MAX = [0.8, -0.2, 1.0], [1.0, 0.2, 1.4]
+
 
 class Environment(object):
 
@@ -33,7 +37,9 @@ class Environment(object):
         self.initial_agent_tip_position = self.agent.get_tip().get_position()
         self.initial_agent_tip_quaternion = self.agent.get_tip().get_quaternion()
         self.agent_tip = self.agent.get_tip()
-     
+        #
+        self.camera = VisionSensor('kinect_depth')
+       
     def _get_state(self):
         # Return state containing arm joint angles/velocities & target position
         return (self.agent.get_joint_positions() + self.pollo_target.get_position())
@@ -117,26 +123,50 @@ agent = Agent()
 joy.start()
 replay_buffer = []
 
+# read trajectory
 traj = []
 with open('tray.txt', 'r') as f:
     for line in f:
         for c in line[1:-3].split(','):
             traj.append(float(c))
 arm_path = ArmConfigurationPath(env.agent, traj)
+plt.figure(1)
+
+def vrepToNP(c):
+        return np.array([[c[0],c[4],c[8],c[3]],
+                         [c[1],c[5],c[9],c[7]],
+                         [c[2],c[6],c[10],c[11]],
+                         [0,   0,   0,    1]])
 
 while not joy.end:
     failure = False
     state = env.reset()
     while not joy.next_ep and not joy.end:
-        # action = agent.act(env, joy)
-        # reward, next_state = env.step(action)
-        # replay_buffer.append(action)
-        # state = next_state
+        action = agent.act(env, joy)
+        reward, next_state = env.step(action)
+        replay_buffer.append(action)
+        state = next_state
 
-        if joy.unloading and arm_path.step():
-            pass
-        env.pr.step()  
+        # if joy.unloading and arm_path.step():
+        #     pass
+        #env.pr.step()  
+        
+        depth = env.camera.capture_rgb()
+        plt.clf()
+        plt.imshow(depth, cmap = 'hot')
+        # # project env.pollo_target.get_position() on image
+        np_pollo_target = np.array(env.pollo_target.get_position())
+        camera_matrix = vrep.simGetObjectMatrix(env.camera.get_handle(),-1)
+        np_camera_matrix = vrepToNP(camera_matrix)
+        pollo_en_ numpy.linalg.inv(np_camera_matrix) * np_pollo_target
+        
+        #print(np_camera_matrix.shape)
+        # p = vrep.simMultiplyVector(vrep.simInvertMatrix(camera_matrix), pollo_target)
 
+        #print(p)
+        plt.pause(0.0001)
+       
+   
        
     print("Resetting environment")
     joy.next_ep = False
