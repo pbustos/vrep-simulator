@@ -131,6 +131,7 @@ with open('tray.txt', 'r') as f:
             traj.append(float(c))
 arm_path = ArmConfigurationPath(env.agent, traj)
 plt.figure(1)
+fig, ax = plt.subplots(1)
 
 def vrepToNP(c):
         return np.array([[c[0],c[4],c[8],c[3]],
@@ -151,14 +152,37 @@ while not joy.end:
         #     pass
         #env.pr.step()  
         
+        # transform env.pollo_target.get_position() to camera coordinates and project pollo_en_camera a image coordinates
+        np_pollo_target = np.array([env.pollo_target.get_position()])
+        np_pollo_target = np.append(np_pollo_target,1.0)
+        camera_matrix_extrinsics = vrep.simGetObjectMatrix(env.camera.get_handle(),-1)
+        np_camera_matrix_extrinsics = vrepToNP(camera_matrix_extrinsics)
+        width = 640.0
+        height = 480.0
+        angle = math.radians(57.0)
+        focalx_px = (width/2.0) / math.tan(angle/2.0)
+        focaly_px = (height/2.0) / math.tan(angle/2.0)
+        np_camera_matrix_intrinsics = np.array([[-focalx_px, 0.0, 320.0],
+                                                [0.0, -focalx_px, 240.0],
+                                                [0.0, 0.0, 1.0]])
+        np_camera_matrix_extrinsics = np.delete(np.linalg.inv(np_camera_matrix_extrinsics), 3, 0)
+        np_pollo_en_camara = np_camera_matrix_extrinsics.dot(np_pollo_target)
+        #print(np_pollo_target, np_pollo_en_camara)
+        
+        #np_pollo_en_camara = np.matmul(np_camera_matrix_intrinsics,np_camera_matrix_extrinsics).dot(np_pollo_target)
+        #np_pollo_en_camara[1], np_pollo_en_camara[2] = np_pollo_en_camara[2], np_pollo_en_camara[1]
+        np_pollo_en_camara = np_camera_matrix_intrinsics.dot(np_pollo_en_camara)
+        np_pollo_en_camara = np_pollo_en_camara / np_pollo_en_camara[2]
+        np_pollo_en_camara = np.delete(np_pollo_en_camara,2)
+        
+        # capture depth image
         depth = env.camera.capture_rgb()
+        circ = plt.Circle((int(np_pollo_en_camara[0]), int(np_pollo_en_camara[1])),10)
         plt.clf()
-        plt.imshow(depth, cmap = 'hot')
-        # # project env.pollo_target.get_position() on image
-        np_pollo_target = np.array(env.pollo_target.get_position())
-        camera_matrix = vrep.simGetObjectMatrix(env.camera.get_handle(),-1)
-        np_camera_matrix = vrepToNP(camera_matrix)
-        pollo_en_ numpy.linalg.inv(np_camera_matrix) * np_pollo_target
+        fig = plt.gcf()
+        ax = fig.gca()
+        ax.add_artist(circ)
+        ax.imshow(depth, cmap = 'hot')
         
         #print(np_camera_matrix.shape)
         # p = vrep.simMultiplyVector(vrep.simInvertMatrix(camera_matrix), pollo_target)
