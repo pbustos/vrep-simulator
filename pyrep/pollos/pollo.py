@@ -6,6 +6,7 @@ from pyrep.errors import ConfigurationPathError, IKError
 from pyrep.robots.configuration_paths.arm_configuration_path import ArmConfigurationPath
 from pyrep.objects.dummy import Dummy
 from pyrep.objects.vision_sensor import VisionSensor
+from pyrep.objects.cartesian_path import CartesianPath
 import numpy as np
 import math, time
 from inputs import devices, get_gamepad
@@ -13,6 +14,7 @@ import threading
 from pyquaternion import Quaternion
 from matplotlib import pyplot as plt
 from pyrep.backend import vrep
+import os
 
 SCENE_FILE = '/home/pbustos/software/vrep-simulator/pollos/pollos.ttt'
 POS_MIN, POS_MAX = [0.8, -0.2, 1.0], [1.0, 0.2, 1.4]
@@ -124,12 +126,12 @@ joy.start()
 replay_buffer = []
 
 # read trajectory
-traj = []
-with open('tray.txt', 'r') as f:
-    for line in f:
-        for c in line[1:-3].split(','):
-            traj.append(float(c))
-arm_path = ArmConfigurationPath(env.agent, traj)
+# traj = []
+# with open('tray.txt', 'r') as f:
+#     for line in f:
+#         for c in line[1:-3].split(','):
+#             traj.append(float(c))
+# arm_path = ArmConfigurationPath(env.agent, traj)
 plt.figure(1)
 fig, ax = plt.subplots(1)
 
@@ -139,42 +141,39 @@ def vrepToNP(c):
                          [c[2],c[6],c[10],c[11]],
                          [0,   0,   0,    1]])
 
+camera_matrix_extrinsics = vrep.simGetObjectMatrix(env.camera.get_handle(),-1)
+np_camera_matrix_extrinsics = np.delete(np.linalg.inv(vrepToNP(camera_matrix_extrinsics)), 3, 0)
+width = 640.0
+height = 480.0
+angle = math.radians(57.0)
+focalx_px = (width/2.0) / math.tan(angle/2.0)
+focaly_px = (height/2.0) / math.tan(angle/2.0)
+np_camera_matrix_intrinsics = np.array([[-focalx_px, 0.0, 320.0],
+                                        [0.0, -focalx_px, 240.0],
+                                        [0.0, 0.0, 1.0]])
+num_ep = 0
+c_path = None
+
 while not joy.end:
     failure = False
+    joy.next_ep = False
     state = env.reset()
+    num_frame = 0
+    num_ep += 1
+    start = time.time()
     while not joy.next_ep and not joy.end:
         action = agent.act(env, joy)
         reward, next_state = env.step(action)
         replay_buffer.append(action)
         state = next_state
-
-        # if joy.unloading and arm_path.step():
-        #     pass
-        #env.pr.step()  
         
         # transform env.pollo_target.get_position() to camera coordinates and project pollo_en_camera a image coordinates
-        np_pollo_target = np.array([env.pollo_target.get_position()])
-        np_pollo_target = np.append(np_pollo_target,1.0)
-        camera_matrix_extrinsics = vrep.simGetObjectMatrix(env.camera.get_handle(),-1)
-        np_camera_matrix_extrinsics = vrepToNP(camera_matrix_extrinsics)
-        width = 640.0
-        height = 480.0
-        angle = math.radians(57.0)
-        focalx_px = (width/2.0) / math.tan(angle/2.0)
-        focaly_px = (height/2.0) / math.tan(angle/2.0)
-        np_camera_matrix_intrinsics = np.array([[-focalx_px, 0.0, 320.0],
-                                                [0.0, -focalx_px, 240.0],
-                                                [0.0, 0.0, 1.0]])
-        np_camera_matrix_extrinsics = np.delete(np.linalg.inv(np_camera_matrix_extrinsics), 3, 0)
-        np_pollo_en_camara = np_camera_matrix_extrinsics.dot(np_pollo_target)
-        #print(np_pollo_target, np_pollo_en_camara)
-        
-        #np_pollo_en_camara = np.matmul(np_camera_matrix_intrinsics,np_camera_matrix_extrinsics).dot(np_pollo_target)
-        #np_pollo_en_camara[1], np_pollo_en_camara[2] = np_pollo_en_camara[2], np_pollo_en_camara[1]
-        np_pollo_en_camara = np_camera_matrix_intrinsics.dot(np_pollo_en_camara)
+        np_pollo_target = np.array(env.pollo_target.get_position())
+        np_pollo_target_cam = np_camera_matrix_extrinsics.dot(np.append([np_pollo_target],1.0))
+        np_pollo_en_camara = np_camera_matrix_intrinsics.dot(np_pollo_target_cam)
         np_pollo_en_camara = np_pollo_en_camara / np_pollo_en_camara[2]
         np_pollo_en_camara = np.delete(np_pollo_en_camara,2)
-        
+         
         # capture depth image
         depth = env.camera.capture_rgb()
         circ = plt.Circle((int(np_pollo_en_camara[0]), int(np_pollo_en_camara[1])),10)
@@ -183,21 +182,47 @@ while not joy.end:
         ax = fig.gca()
         ax.add_artist(circ)
         ax.imshow(depth, cmap = 'hot')
-        
-        #print(np_camera_matrix.shape)
-        # p = vrep.simMultiplyVector(vrep.simInvertMatrix(camera_matrix), pollo_target)
+        plt.pause(0.000001)
 
-        #print(p)
-        plt.pause(0.0001)
+        # save frame
+        # end = time.time()
+        # if (end-start) > 0.3:
+        #     filename = 'pollos-ep-{}-frame-{}'.format(num_ep, num_frame)
+        #     print(filename)
+        #     num_frame += 1
+        #     temp = np.array((depth, (int(np_pollo_en_camara[0]), int(np_pollo_en_camara[1]))))
+        #     np.save(filename, temp)
+        #     #classes_file.write(filename + " " + f'{int(np_pollo_en_camara[0])}' + " " + f'{int(np_pollo_en_camara[1])}' + os.linesep)
+        #     start = time.time()
+
+        # compute trayectory
+        np_robot_tip_position = np.array(env.agent.get_tip().get_position())
+        np_robot_tip_orientation = np.array(env.agent.get_tip().get_orientation())
+
+        dist = np.linalg.norm(np_robot_tip_position-np_pollo_target)
+        landa = 0.0
+        if c_path is not None:
+            c_path.remove()
+        c_path = CartesianPath.create()
+        for p in range(int(dist/0.1)):
+            r = (1.0 - landa) * np_robot_tip_position + (landa * np_pollo_target)
+            c_path.insert_control_points([list(r) + list(np_robot_tip_orientation)])
+            landa += 0.1
+        #arm_path = ArmConfigurationPath(env.agent, traj)
+        #arm_path.visualize()
+        
+        # reset episode
+        if np.linalg.norm(np_pollo_target) < 0.4:
+            joy.next_ep = True
        
-   
-       
+
     print("Resetting environment")
     joy.next_ep = False
     # with open('tray.txt', 'w') as f:
     #     for coor in replay_buffer:
     #         f.write("%s \n" % coor)
     
+classes_file.close()
 env.shutdown()
 
 
