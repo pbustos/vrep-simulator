@@ -54,14 +54,21 @@ class Environment(object):
         return self._get_state()
 
     def step(self, action):
-        #self.agent.set_joint_target_velocities(action)  # Execute action on arm
+        np_tip = np.array(self.agent_tip.get_position())
+        print(np_tip)
+        print(action)
+        print("-----")
+        if action is None:
+            self.pr.step()
+            return 0.0, self._get_state()
+
         self.agent.set_joint_target_positions(action)
         self.pr.step()  # Step the physics simulation
-        np_pollo_target = np.array(self.pollo_target.get_position())
-        np_tip = np.array(self.agent_tip.get_position())
+        # np_pollo_target = np.array(self.pollo_target.get_position())
+        
         # Reward is negative distance to target
-        reward = -np.linalg.norm(np_pollo_target-np_tip)
-        return reward, self._get_state()
+        #reward = -np.linalg.norm(np_pollo_target-np_tip)
+        return 0.0, self._get_state()
 
     def shutdown(self):
         self.pr.stop()
@@ -69,21 +76,68 @@ class Environment(object):
 
 
 class Agent(object):
+    state = "JOYSTICK"
 
     def act(self, env, joy):
+        if self.state == "JOYSTICK":
+            return(self.joystick(env, joy))
+        elif self.state == "INIT_GRASP":
+            return(self.init_grasp(env))
+        elif self.state == "GRASP":
+            return(self.grasp(env))
+        elif self.state == "UNLOADING":
+            return(self.unloading(env,joy))
+    
+    def joystick(self, env, joy):
+        dist = np.linalg.norm(np_robot_tip_position - np_pollo_target)
+        angles = env.agent.get_joint_positions()
+        if dist < 0.7:
+            print("changing to INIT_GRASP")
+            self.state = "INIT_GRASP"
+            return angles
+    
         if joy.unloading:
             wrist_angle = math.radians(120)
         else:
             wrist_angle = env.initial_joint_positions[5]
         local_target = np.array(env.agent.get_tip().get_position()) + np.array(joy.incs)
-        angles = env.agent.get_joint_positions()
         try:
             angles = env.agent.solve_ik(position=list(local_target), quaternion=env.initial_agent_tip_quaternion)
             angles[5] = wrist_angle
         except IKError as e:
-            print('Agent::act    Could not find joint values')   
-            
+            print('Agent::act    Could not find joint values', e)   
+        #print(angles)
+        print(dist)
         return angles
+
+    def init_grasp(self, env):
+        np_pollo_target = np.array(env.pollo_target.get_position())
+        np_robot_tip_position = np.array(env.agent.get_tip().get_position())
+        np_robot_tip_orientation = np.array(env.agent.get_tip().get_orientation())
+        dist = np.linalg.norm(np_robot_tip_position - np_pollo_target)
+        c_path = CartesianPath.create()
+        landa = 0.0
+        for p in range(int(dist/0.1)):
+            r = (1.0 - landa) * np_robot_tip_position + (landa * np_pollo_target)
+            c_path.insert_control_points([list(r) + list(np_robot_tip_orientation)])
+            landa += 0.1
+        try:
+            #angles = env.agent.solve_ik(position=list(np_pollo_target), orientation=np_robot_tip_orientation)
+            self.path = env.agent.get_path_from_cartesian_path(c_path)
+            print("at init_grasp ")
+        except IKError as e:
+            print('Agent::grasp    Could not find joint values')   
+        self.state = "GRASP"    
+        print("changing to GRASP")
+        return None
+            
+    def grasp(self, env):
+        np_pollo_target = np.array(env.pollo_target.get_position())
+        np_robot_tip_position = np.array(env.agent.get_tip().get_position())
+        np_robot_tip_orientation = np.array(env.agent.get_tip().get_quaternion())
+        dist = np.linalg.norm(np_robot_tip_position - np_pollo_target)
+        self.path.step()
+        return None
 
     def learn(self, replay_buffer):
         del replay_buffer
@@ -132,6 +186,7 @@ replay_buffer = []
 #         for c in line[1:-3].split(','):
 #             traj.append(float(c))
 # arm_path = ArmConfigurationPath(env.agent, traj)
+
 plt.figure(1)
 fig, ax = plt.subplots(1)
 
@@ -153,6 +208,7 @@ np_camera_matrix_intrinsics = np.array([[-focalx_px, 0.0, 320.0],
                                         [0.0, 0.0, 1.0]])
 num_ep = 0
 c_path = None
+grasped = False
 
 while not joy.end:
     failure = False
@@ -162,11 +218,6 @@ while not joy.end:
     num_ep += 1
     start = time.time()
     while not joy.next_ep and not joy.end:
-        action = agent.act(env, joy)
-        reward, next_state = env.step(action)
-        replay_buffer.append(action)
-        state = next_state
-        
         # transform env.pollo_target.get_position() to camera coordinates and project pollo_en_camera a image coordinates
         np_pollo_target = np.array(env.pollo_target.get_position())
         np_pollo_target_cam = np_camera_matrix_extrinsics.dot(np.append([np_pollo_target],1.0))
@@ -200,20 +251,24 @@ while not joy.end:
         np_robot_tip_orientation = np.array(env.agent.get_tip().get_orientation())
 
         dist = np.linalg.norm(np_robot_tip_position-np_pollo_target)
-        landa = 0.0
-        if c_path is not None:
-            c_path.remove()
-        c_path = CartesianPath.create()
-        for p in range(int(dist/0.1)):
-            r = (1.0 - landa) * np_robot_tip_position + (landa * np_pollo_target)
-            c_path.insert_control_points([list(r) + list(np_robot_tip_orientation)])
-            landa += 0.1
-        #arm_path = ArmConfigurationPath(env.agent, traj)
-        #arm_path.visualize()
+        # landa = 0.0
+        # if c_path is not None:
+        #     c_path.remove()
+        # c_path = CartesianPath.create()
+        # for p in range(int(dist/0.1)):
+        #     r = (1.0 - landa) * np_robot_tip_position + (landa * np_pollo_target)
+        #     c_path.insert_control_points([list(r) + list(np_robot_tip_orientation)])
+        #     landa += 0.1
         
+       
+        # simulate
+        action = agent.act(env, joy)
+        reward, next_state = env.step(action)
+        replay_buffer.append(action)
+        state = next_state
         # reset episode
-        if np.linalg.norm(np_pollo_target) < 0.4:
-            joy.next_ep = True
+        # if np.linalg.norm(np_pollo_target) < 0.4:
+        #   joy.next_ep = True
        
 
     print("Resetting environment")
@@ -222,7 +277,6 @@ while not joy.end:
     #     for coor in replay_buffer:
     #         f.write("%s \n" % coor)
     
-classes_file.close()
 env.shutdown()
 
 
