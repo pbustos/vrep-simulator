@@ -33,6 +33,7 @@ class Environment(object):
         self.initial_joint_positions = self.agent.get_joint_positions()
         self.pollo_target = Dummy('pollo_target')
         self.pollo = Shape('pollo')
+        self.table_target = Dummy('table_target')
         self.initial_pollo_position = self.pollo.get_position()
         self.initial_pollo_orientation = self.pollo.get_quaternion()
         self.table_target = Dummy('table_target')
@@ -55,16 +56,12 @@ class Environment(object):
 
     def step(self, action):
         np_tip = np.array(self.agent_tip.get_position())
-        print(np_tip)
-        print(action)
-        print("-----")
         if action is None:
             self.pr.step()
             return 0.0, self._get_state()
 
         self.agent.set_joint_target_positions(action)
         self.pr.step()  # Step the physics simulation
-        # np_pollo_target = np.array(self.pollo_target.get_position())
         
         # Reward is negative distance to target
         #reward = -np.linalg.norm(np_pollo_target-np_tip)
@@ -74,10 +71,10 @@ class Environment(object):
         self.pr.stop()
         self.pr.shutdown()
 
-
 class Agent(object):
     state = "JOYSTICK"
 
+    # simple state machine
     def act(self, env, joy):
         if self.state == "JOYSTICK":
             return(self.joystick(env, joy))
@@ -85,13 +82,18 @@ class Agent(object):
             return(self.init_grasp(env))
         elif self.state == "GRASP":
             return(self.grasp(env))
-        elif self.state == "UNLOADING":
-            return(self.unloading(env,joy))
+        elif self.state == "UNLOAD":
+            return(self.unload(env))
+        elif self.state == "WAIT":
+            return(self.wait())
+        elif self.state == "RESET_EPISODE":
+            return(self.resetEpisode(joy))
+            
     
     def joystick(self, env, joy):
         dist = np.linalg.norm(np_robot_tip_position - np_pollo_target)
         angles = env.agent.get_joint_positions()
-        if dist < 0.7:
+        if dist < 0.5:
             print("changing to INIT_GRASP")
             self.state = "INIT_GRASP"
             return angles
@@ -116,11 +118,21 @@ class Agent(object):
         np_robot_tip_orientation = np.array(env.agent.get_tip().get_orientation())
         dist = np.linalg.norm(np_robot_tip_position - np_pollo_target)
         c_path = CartesianPath.create()
-        landa = 0.0
-        for p in range(int(dist/0.1)):
-            r = (1.0 - landa) * np_robot_tip_position + (landa * np_pollo_target)
-            c_path.insert_control_points([list(r) + list(np_robot_tip_orientation)])
-            landa += 0.1
+        
+        # LIFO: goto table
+        c_path.insert_control_points([env.table_target.get_position() + list(np_robot_tip_orientation)])
+        
+        at100 = np.add(np_pollo_target, np.array([0.0,0.0,0.3]))
+        c_path.insert_control_points([list(at100) + list(np_robot_tip_orientation)])
+        # c_path.insert_control_points([env.table_target.get_position() + list(np_robot_tip_orientation)])
+        # np_robot_tip_orientation[0] += 1
+        # c_path.insert_control_points([list(np_pollo_target) + list(np_robot_tip_orientation)])
+        # np_robot_tip_orientation[0] -= 1
+        c_path.insert_control_points([list(np_pollo_target) + list(np_robot_tip_orientation)])
+        # at10 = np.add(np.array(c_path.get_pose_on_path(0.2)[0]), np.array([0.0,0.0,0.1]))
+        # c_path.insert_control_points([list(at10) + list(np_robot_tip_orientation)])
+        c_path.insert_control_points([list(np_robot_tip_position) + list(np_robot_tip_orientation)])
+        
         try:
             #angles = env.agent.solve_ik(position=list(np_pollo_target), orientation=np_robot_tip_orientation)
             self.path = env.agent.get_path_from_cartesian_path(c_path)
@@ -136,8 +148,32 @@ class Agent(object):
         np_robot_tip_position = np.array(env.agent.get_tip().get_position())
         np_robot_tip_orientation = np.array(env.agent.get_tip().get_quaternion())
         dist = np.linalg.norm(np_robot_tip_position - np_pollo_target)
-        self.path.step()
+        if self.path.step():
+            self.state = "UNLOAD"
         return None
+
+    def unload(self, env):
+        angles = env.agent.get_joint_positions()
+        angles[5] = math.radians(120)
+        self.initReloj(3)
+        self.state = "WAIT"
+        return angles
+
+    def wait(self):
+        if (time.time()-self.reloj) > self.DELAY:
+            self.state = "RESET_EPISODE"
+        return None
+
+    def resetEpisode(self, joy):
+        joy.next_ep = True
+        self.state = "JOYSTICK"
+        return None
+
+    ########################3
+        
+    def initReloj(self, delay):
+        self.reloj = time.time()
+        self.DELAY = delay
 
     def learn(self, replay_buffer):
         del replay_buffer
