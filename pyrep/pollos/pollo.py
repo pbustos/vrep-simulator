@@ -1,13 +1,13 @@
 import numpy as np
 import math, time
 from joyreader import JoyReader
-from environment import Environment
+from environment import EnvPollos
 from agent import Agent
 import threading
 import os
 
   
-env = Environment()
+env = EnvPollos(3)
 joy = JoyReader()
 agent = Agent()
 joy.start()
