@@ -30,11 +30,12 @@ class EnvPollos(Env):
         #self.action_space = Box(low=np.array([-0.1, -1.7, -2.5, -1.5, 0.0, 0.0]), 
         #                        high=np.array([0.1, 1.7, 2.5, 1.5, 0.0, 0.0]))
         inc = 0.1
-        self.action_space = Box(low=np.array([-inc, -inc, -inc, -inc, 0, -inc]), 
-                                high=np.array([inc, inc, inc, inc, 0, inc]))
-       
-        self.observation_space = Box(low=np.array([-0.5, 0.0, -0.2]), 
-                                     high=np.array([0.5, 1.0, 1.0]))
+        self.action_space = Box(low=np.array([-inc, -inc, -inc, -inc, 0.0, 0.0]), 
+                                high=np.array([inc, inc, inc, inc, 0.0, 0.0]))
+        self.observation_space = Box(low=0, high=255, shape=(480, 640, 1), dtype=np.uint8)
+
+        # self.observation_space = Box(low=np.array([-0.1, -0.2, 0, -1.5, 0.0, 0.0, -0.5, -0.2, -0.2]), 
+        #                              high=np.array([0.1, 1.7, 2.5, 0, 0.0, 0.0, 0.5, 0.2, 1.0]))
         
         #
         self.pr = PyRep()
@@ -47,8 +48,8 @@ class EnvPollos(Env):
         self.joints = [Joint('UR10_joint1'), Joint('UR10_joint2'), Joint('UR10_joint3'), Joint('UR10_joint4'), Joint('UR10_joint5'), Joint('UR10_joint6')]
         #self.joints_limits = [[j.get_joint_interval()[1][0],j.get_joint_interval()[1][0]+j.get_joint_interval()[1][1]] 
         #                      for j in self.joints]
-        self.high_joints_limits = [0.1, 1.7, 2.7, 0.0, 0.02, 0.3]
-        self.low_joints_limits = [-0.1, -0.2, 0.0, -1.5, -0.02, -0.5]                             
+        self.high_joints_limits = [0.1, 1.7, 2.7, 0.0, 0.1, 0.1]
+        self.low_joints_limits = [-0.1, -0.2, 0.0, -1.5, -0.1, -0.1]                             
         self.agent_hand = Shape('hand')
         
         self.initial_agent_tip_position = self.agent.get_tip().get_position()
@@ -149,7 +150,7 @@ class EnvPollos(Env):
             return self._get_state(), -10.0, True, {}
         
         # Reward 
-        pollo_height = np.exp(-altura*20)  # para 0.3m pollo_height = 0.002, para 0m pollo_height = 1
+        pollo_height = np.exp(-altura*20)  # para 1m pollo_height = 0.001, para 0m pollo_height = 1
         reward = -pollo_height - dist
         logging.debug("New joints value out of limits r=-10")
         return self._get_state(), reward, False, {}
@@ -190,15 +191,12 @@ class EnvPollos(Env):
 
 
     def _get_state(self):
-        # Return state containing arm joint angles/velocities & target position
-        # return (self.agent.get_joint_positions() + 
-        #         self.agent.get_joint_velocities() +
-        #         self.pollo_target.get_position())
-        p = self.getPolloEnCamaraEx()
-        j = self.agent.get_joint_positions()
-        #r = np.array([p[0],p[1],p[2],j[0],j[1],j[2],j[3],j[4],j[5]])
-        r = np.array([p[0],p[1],p[2]])
-        return r
+        depth = self.camera.capture_depth()
+        scaler = MinMaxScaler(feature_range=(0, 250))
+        scaler = scaler.fit(depth)
+        depth_scaled = scaler.transform(depth)
+        depth_scaled = np.array(depth_scaled).reshape(480, 640 ,1)
+        return depth_scaled.astype('uint8')
     
     def vrepToNP(self, c):
         return np.array([[c[0],c[4],c[8],c[3]],

@@ -6,7 +6,7 @@ import tensorflow as tf
 from mpi4py import MPI
 from stable_baselines import logger, bench
 from stable_baselines.common.misc_util import set_global_seeds, boolean_flag
-from stable_baselines.ddpg.policies import MlpPolicy, LnMlpPolicy
+from stable_baselines.ddpg.policies import MlpPolicy, LnMlpPolicy, CnnPolicy
 #from stable_baselines.sac.policies import MlpPolicy, LnMlpPolicy, CnnPolicy
 from stable_baselines.ddpg import DDPG
 from stable_baselines import SAC
@@ -15,13 +15,12 @@ from stable_baselines.results_plotter import load_results, ts2xy
 from stable_baselines.bench import Monitor
 from stable_baselines.common.vec_env import DummyVecEnv, VecCheckNan
 
-#from envtraj import EnvPollos
-from environment import EnvPollos
-
+from envrawimage import EnvPollos
+#from environment import EnvPollos
 import time
 
 best_mean_reward, n_steps = -np.inf, 0
-log_dir = "log/"
+log_dir = "log2/"
 os.makedirs(log_dir, exist_ok=True)
 
 def callback(_locals, _globals):
@@ -83,11 +82,16 @@ if rank == 0:
     start_time = time.time()
 
 policy = LnMlpPolicy
+policy = CnnPolicy
+
 
 num_timesteps = 1e6
 #model = SAC(MlpPolicy, env, verbose=1)
 #model.learn(total_timesteps=100000, log_interval=10, callback=callback)
-model = DDPG(policy=policy, env=env, param_noise=param_noise, action_noise=action_noise, buffer_size=int(1e6), verbose=1)
+#model = DDPG(policy=policy, env=env, param_noise=param_noise, action_noise=action_noise, buffer_size=int(1e6), verbose=1)
+
+model = DDPG(policy=policy, env=env, buffer_size=int(1e6), verbose=1, batch_size=1)
+
 model.learn(total_timesteps=num_timesteps, callback=callback)
 logger.info('total runtime: {}s'.format(time.time() - start_time))
 env.close()
