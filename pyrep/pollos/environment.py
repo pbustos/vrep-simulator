@@ -109,7 +109,7 @@ class EnvPollos(Env):
             print(action)
             return self._get_state(), -1.0, False, {}
 
-        action[1] = self.axis1_scaler.transform(action[1])
+        action[1] = self.axis1_scaler.transform(np.array(action[1]).reshape(1,-1))
         action[2] = self.axis2_scaler.transform(action[2])
         action[3] = self.axis3_scaler.transform(action[3])
 

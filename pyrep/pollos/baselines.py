@@ -15,13 +15,13 @@ from stable_baselines.results_plotter import load_results, ts2xy
 from stable_baselines.bench import Monitor
 from stable_baselines.common.vec_env import DummyVecEnv, VecCheckNan
 
-from envtraj import EnvPollos
-#from environment import EnvPollos
+#from envtraj import EnvPollos
+from environment import EnvPollos
 
 import time
 
 best_mean_reward, n_steps = -np.inf, 0
-log_dir = "log2/"
+log_dir = "log/"
 os.makedirs(log_dir, exist_ok=True)
 
 def callback(_locals, _globals):
