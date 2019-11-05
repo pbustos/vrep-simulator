@@ -140,7 +140,7 @@ class EnvPollos(Env):
                 return self._get_state(), -10.0, True, {}      
         if altura > 0.3:                                       # pollo en mano
             logging.debug("Height reached !!! r=0")
-            return self._get_state(), 10.0, True, {}
+            return self._get_state(), 30.0, True, {}
         elif dist > self.initial_distance:                     # mano se aleja
             logging.debug("Hand moving away from chicken r=-10")
             return self._get_state(), -10.0, True, {}
@@ -149,8 +149,8 @@ class EnvPollos(Env):
             return self._get_state(), -10.0, True, {}
         
         # Reward 
-        pollo_height = np.exp(-altura*20)  # para 0.3m pollo_height = 0.002, para 0m pollo_height = 1
-        reward = -pollo_height - dist
+        #pollo_height = np.exp(-altura*20)  # para 0.3m pollo_height = 0.002, para 0m pollo_height = 1
+        reward = altura - dist
         logging.debug("New joints value out of limits r=-10")
         return self._get_state(), reward, False, {}
 
