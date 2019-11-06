@@ -95,6 +95,9 @@ class EnvPollos(Env):
                 break
         # a los dos mil reset hay que recargar el ROBOT porque se descoyunta
         #if self.num_resets > 2000:
+        
+        self.total_reward = 0.0
+        print('----------------')
 
         return self._get_state()
 
@@ -129,7 +132,7 @@ class EnvPollos(Env):
             if not np.any(np.where( np.fabs(a) < 0.1, False, True )) or (time.time()-reloj) > 3:
                 break
 
-        # compute relevant magnitudes
+          # compute relevant magnitudes
         np_pollo_target = np.array(self.pollo_target.get_position())
         np_robot_tip_position = np.array(self.agent.get_tip().get_position())
         dist = np.linalg.norm(np_pollo_target-np_robot_tip_position)
@@ -138,21 +141,34 @@ class EnvPollos(Env):
         for obj in self.scene_objects:                         # colisión con la mesa
             if self.agent_hand.check_collision(obj):
                 logging.debug("Collision with objects r=-10")
+                self.total_reward = self.total_reward + -10.0
+                print(self.total_reward)
                 return self._get_state(), -10.0, True, {}      
         if altura > 0.3:                                       # pollo en mano
-            logging.debug("Height reached !!! r=0")
-            return self._get_state(), 10.0, True, {}
+            logging.debug("Height reached !!! r=30")
+            self.total_reward = self.total_reward + 30.0
+            print(self.total_reward)
+            return self._get_state(), 30.0, True, {}
         elif dist > self.initial_distance:                     # mano se aleja
             logging.debug("Hand moving away from chicken r=-10")
+            self.total_reward = self.total_reward + -10.0
+            print(self.total_reward)
             return self._get_state(), -10.0, True, {}
-        if time.time() - self.initial_epoch_time > 5:          # too much time
+        used_time = time.time() - self.initial_epoch_time
+        if used_time > 5:          # too much time
             logging.debug("Time out. End of epoch r=-10")
+            if altura > 0.01: 
+                self.total_reward = self.total_reward + altura
+            else:
+                self.total_reward = self.total_reward - 10
+            print(self.total_reward)
             return self._get_state(), -10.0, True, {}
         
         # Reward 
-        pollo_height = np.exp(-altura*20)  # para 1m pollo_height = 0.001, para 0m pollo_height = 1
-        reward = -pollo_height - dist
-        logging.debug("New joints value out of limits r=-10")
+        #pollo_height = np.exp(-altura*20)  # para 0.3m pollo_height = 0.002, para 0m pollo_height = 1
+        reward = altura - dist - used_time
+        self.total_reward = self.total_reward + reward
+        #print(self.total_reward)
         return self._get_state(), reward, False, {}
 
     def close(self):
