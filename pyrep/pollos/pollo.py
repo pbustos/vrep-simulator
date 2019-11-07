@@ -27,7 +27,7 @@ while not joy.end:
     while not joy.next_ep and not joy.end:
        
         action = agent.act(env, joy)
-        reward, next_state = env.step(action)
+        next_state, reward, done, info = env.step(action)
         print(reward)
         replay_buffer.append(action)
         state = next_state
