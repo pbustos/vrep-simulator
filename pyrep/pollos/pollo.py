@@ -1,45 +1,25 @@
 import numpy as np
 import math, time
 from joyreader import JoyReader
-from environment import EnvPollos
+from joyenv import EnvPollosJoy
 from agent import Agent
 import threading
 import os
 
-  
-env = EnvPollos(3)
+env = EnvPollosJoystick()
 joy = JoyReader()
 agent = Agent()
 joy.start()
-replay_buffer = []
-
-# read trajectory
-# traj = []
-# with open('tray.txt', 'r') as f:
-#     for line in f:
-#         for c in line[1:-3].split(','):
-#             traj.append(float(c))
-# arm_path = ArmConfigurationPath(env.agent, traj)
 
 while not joy.end:
+    env.reset()
     joy.next_ep = False
-    state = env.reset()
     while not joy.next_ep and not joy.end:
-       
-        action = agent.act(env, joy)
-        next_state, reward, done, info = env.step(action)
-        print(reward)
-        replay_buffer.append(action)
-        state = next_state
-
+        env.step(joy)
+        
     print("Resetting environment")
     joy.next_ep = False
-    # with open('tray.txt', 'w') as f:
-    #     for coor in replay_buffer:
-    #         f.write("%s \n" % coor)
     
-env.shutdown()
-
 
 ###################################################################
 
