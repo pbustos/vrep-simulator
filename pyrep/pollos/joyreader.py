@@ -2,9 +2,9 @@ from inputs import devices, get_gamepad
 import threading
 
 class JoyReader(threading.Thread):
-    MAX_ZADV = 20 #mm/sg
-    MAX_XADV = 20 #mm/sg
-    MAX_YADV = 20 #mm/sg
+    MAX_ZADV = 40 #mm/sg
+    MAX_XADV = 40 #mm/sg
+    MAX_YADV = 40 #mm/sg
     end = False
     unloading = False
     next_ep = False

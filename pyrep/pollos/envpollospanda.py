@@ -4,6 +4,7 @@ import logging, math, time, os
 import numpy as np
 from pyrep import PyRep
 from pyrep.robots.arms.ur10 import UR10
+from pyrep.robots.arms.panda import Panda
 from pyrep.objects.shape import Shape
 from pyrep.objects.joint import Joint
 from pyrep.const import PrimitiveShape
@@ -16,9 +17,9 @@ from gym import Env
 from gym.spaces import Discrete, MultiDiscrete, MultiBinary, Box
 from matplotlib import pyplot as plt
 
-SCENE_FILE = '/home/pbustos/software/vrep-simulator/pollos/pollos.ttt'
+SCENE_FILE = '/home/pbustos/software/vrep-simulator/pollos/pollos-panda.ttt'
 
-class PollosEnv(Env):
+class EnvPollos(Env):
     def __init__(self, ep_length=100):
         """
         Pollos environment for testing purposes
@@ -31,23 +32,23 @@ class PollosEnv(Env):
         self.pr = PyRep()
         self.pr.launch(SCENE_FILE, headless=False)
         self.pr.start()
-        self.agent = UR10()
+        self.agent = Panda()
         self.agent.max_velocity = 1.2
         self.agent.set_control_loop_enabled(True)
         #self.agent.set_motor_locked_at_zero_velocity(True)
         
-        self.joints = [Joint('UR10_joint1'), Joint('UR10_joint2'), Joint('UR10_joint3'), Joint('UR10_joint4'), Joint('UR10_joint5'), Joint('UR10_joint6')]
+        self.MAX_INC = 0.2
+        #elf.joints = [Joint('UR10_joint1'), Joint('UR10_joint2'), Joint('UR10_joint3'), Joint('UR10_joint4'), Joint('UR10_joint5'), Joint('UR10_joint6')]
         #self.joints_limits = [[j.get_joint_interval()[1][0],j.get_joint_interval()[1][0]+j.get_joint_interval()[1][1]] 
         #                      for j in self.joints]
         self.high_joints_limits = [0.1, 1.7, 2.7, 0.0, 0.02, 0.3]
         self.low_joints_limits = [-0.1, -0.2, 0.0, -1.5, -0.02, -0.5]                             
         self.initial_joint_positions = self.agent.get_joint_positions()
         
-        self.agent_hand = Shape('hand')
         self.initial_agent_tip_position = self.agent.get_tip().get_position()
         self.initial_agent_tip_quaternion = self.agent.get_tip().get_quaternion()
 
-        self.target = Dummy('UR10_target')
+        self.target = Dummy('Panda_target')
 
         self.pollo_target = Dummy('pollo_target')
         self.pollo = Shape('pollo')
@@ -93,7 +94,6 @@ class PollosEnv(Env):
 
     def step(self, action): 
         if action is None:
-            self.pr.step()
             print(self.total_reward)
             return self._get_state(), -10.0, True, {}
         
@@ -104,23 +104,17 @@ class PollosEnv(Env):
             return self._get_state(), -10.0, True, {}
 
         # check for strange values
-        if np.any(np.greater(action, INC)) or np.any(np.less(action, -INC)):
-            print("Strange values ", action)
-            self.NANS_COMING = True
-            return self._get_state(), -10.0, True, {}
+        # if np.any(np.greater(action, self.MAX_INC)) or np.any(np.less(action, -self.MAX_INC)):
+        #     print("Strange values ", action)
+        #     self.NANS_COMING = True
+        #     return self._get_state(), -10.0, True, {}
 
         # check for NAN in VREP get_position() 
         if np.any(np.isnan(self.agent.get_tip().get_position())):
             print("NAN values in get_position()", action, self.agent.get_tip().get_position())
-            self.pr.stop()
-            self.pr.launch(SCENE_FILE, headless=False)
-            self.pr.start()
-            self.agent = UR10()
-            self.agent.max_velocity = 1.2
-            self.agent.set_control_loop_enabled(True)
-            #self.agent.set_motor_locked_at_zero_velocity(True)
             return self._get_state(), -10.0, True, {}
 
+        self.pr.step()
         return self._get_state(), 0, True, {}
 
     def close(self):
