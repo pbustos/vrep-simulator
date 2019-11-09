@@ -16,7 +16,8 @@ from gym.spaces import Discrete, MultiDiscrete, MultiBinary, Box
 from matplotlib import pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 
-SCENE_FILE = '/home/pbustos/software/vrep-simulator/pollos/pollos.ttt'
+#SCENE_FILE = '/home/pbustos/software/vrep-simulator/pollos/pollos.ttt'
+SCENE_FILE = '/home/pbustos/software/vrep-simulator/pollos/pollos-ganchos-succion.ttt'
 
 class EnvPollos(Env):
     def __init__(self, ep_length=100):
@@ -25,6 +26,7 @@ class EnvPollos(Env):
         :param dim: (int) the size of the dimensions you want to learn
         :param ep_length: (int) the length of each episodes in timesteps
         """
+        self.vrep = vrep
         logging.basicConfig(level=logging.DEBUG)
         # they have to be simmetric. We interpret actions as angular increments 
         #self.action_space = Box(low=np.array([-0.1, -1.7, -2.5, -1.5, 0.0, 0.0]), 
@@ -41,7 +43,7 @@ class EnvPollos(Env):
         self.pr.launch(SCENE_FILE, headless=False)
         self.pr.start()
         self.agent = UR10()
-        self.agent.max_velocity = 1.2
+        self.agent.max_velocity = 1.9
         self.agent.set_control_loop_enabled(True)
         self.agent.set_motor_locked_at_zero_velocity(True)
         self.joints = [Joint('UR10_joint1'), Joint('UR10_joint2'), Joint('UR10_joint3'), Joint('UR10_joint4'), Joint('UR10_joint5'), Joint('UR10_joint6')]
@@ -49,20 +51,24 @@ class EnvPollos(Env):
         #                      for j in self.joints]
         self.high_joints_limits = [0.1, 1.7, 2.7, 0.0, 0.02, 0.3]
         self.low_joints_limits = [-0.1, -0.2, 0.0, -1.5, -0.02, -0.5]                             
-        self.agent_hand = Shape('hand')
+        #self.agent_hand = Shape('hand')
         
         self.initial_agent_tip_position = self.agent.get_tip().get_position()
         self.initial_agent_tip_quaternion = self.agent.get_tip().get_quaternion()
+        self.initial_agent_tip_euler = self.agent.get_tip().get_orientation()
         self.target = Dummy('UR10_target')
         self.initial_joint_positions = self.agent.get_joint_positions()
         self.pollo_target = Dummy('pollo_target')
         self.pollo = Shape('pollo')
-        self.table_target = Dummy('table_target')
+        #self.table_target = Dummy('table_target')
         self.initial_pollo_position = self.pollo.get_position()
         self.initial_pollo_orientation = self.pollo.get_quaternion()
-        self.table_target = Dummy('table_target')
+        #self.table_target = Dummy('table_target')
+
+        self.succion = Shape('suctionPad')
+
         # objects
-        self.scene_objects = [Shape('table0'), Shape('Plane'), Shape('Plane0'), Shape('ConcretBlock')]
+        #self.scene_objects = [Shape('table0'), Shape('Plane'), Shape('Plane0'), Shape('ConcretBlock')]
         #self.agent_tip = self.agent.get_tip()
         self.initial_distance = np.linalg.norm(np.array(self.initial_pollo_position)-np.array(self.initial_agent_tip_position))
         
