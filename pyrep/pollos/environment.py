@@ -43,7 +43,7 @@ class EnvPollos(Env):
         self.pr.launch(SCENE_FILE, headless=False)
         self.pr.start()
         self.agent = UR10()
-        self.agent.max_velocity = 1.9
+        self.agent.max_velocity = 1
         self.agent.set_control_loop_enabled(True)
         self.agent.set_motor_locked_at_zero_velocity(True)
         self.joints = [Joint('UR10_joint1'), Joint('UR10_joint2'), Joint('UR10_joint3'), Joint('UR10_joint4'), Joint('UR10_joint5'), Joint('UR10_joint6')]
@@ -57,6 +57,7 @@ class EnvPollos(Env):
         self.initial_agent_tip_quaternion = self.agent.get_tip().get_quaternion()
         self.initial_agent_tip_euler = self.agent.get_tip().get_orientation()
         self.target = Dummy('UR10_target')
+        self.initial_target_orientation = self.target.get_orientation()
         self.initial_joint_positions = self.agent.get_joint_positions()
         self.pollo_target = Dummy('pollo_target')
         self.pollo = Shape('pollo')

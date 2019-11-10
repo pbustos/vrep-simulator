@@ -19,7 +19,7 @@ class EnvPollosJoystick(EnvPollos):
             angles = self.agent.solve_ik(position=action, quaternion=self.initial_agent_tip_quaternion)
             #print("ik ", time.time() - start)
             # move the robot and wait to stop
-            self.agent.set_joint_positions(angles)
+            self.agent.set_joint_target_positions(angles)
             #print("ik2 ", time.time() - start)
             # while True:         # wait for arm to stop
             #     self.pr.step()  # Step the physics simulation
