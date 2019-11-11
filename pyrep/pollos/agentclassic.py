@@ -6,8 +6,12 @@ from environment import EnvPollos
 
 class Agent(object):
     state = "WAIT_FOR_CHICKEN"
+    state = "HANGUP"
+    
     reloj = time.time()
     epochs = 0
+    waypoints = [Dummy("Gancho")]
+
     # simple state machine
     def act(self, env):
 
@@ -20,6 +24,8 @@ class Agent(object):
         # state machine
         if self.state == "WAIT_FOR_CHICKEN":
             return(self.wait_for_chicken(env))
+        elif self.state == "HANGUP":
+            return(self.hangup(env))
         elif self.state == "INIT_GRAB":
             return(self.init_grab(env))
         elif self.state == "GRAB":
@@ -29,6 +35,10 @@ class Agent(object):
         elif self.state == "RESET_EPISODE":
             return(self.resetEpisode(env))
     
+    def hangup(self, env):
+        path = env.agent.get_path(position=env.waypoints[0].get_position(),
+                                      quaternion=env.waypoints[0].get_quaternion())
+
     def wait_for_chicken(self, env):
         if time.time() - self.reloj > 5:
             self.state = "RESET_EPISODE"

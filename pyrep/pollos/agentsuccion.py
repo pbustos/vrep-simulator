@@ -133,13 +133,11 @@ agent = Agent()
 joy = JoyReader()
 joy.start()
 
-try:
-    while True:
+while True:
         agent.act(env, joy)
-        #time.sleep(0.050)
-except KeyboardInterrupt:
-    pass
-
+        if keyboard.is_pressed('q'):
+            break
+        
 env.close()
         
     

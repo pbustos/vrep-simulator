@@ -1,4 +1,7 @@
-import logging
+# General Environment to be ineherited by specific ones
+
+import logging, math, time, os
+import numpy as np
 from pyrep import PyRep
 from pyrep.robots.arms.ur10 import UR10
 from pyrep.objects.shape import Shape
@@ -8,16 +11,12 @@ from pyrep.errors import ConfigurationPathError, IKError
 from pyrep.objects.dummy import Dummy
 from pyrep.objects.vision_sensor import VisionSensor
 from pyrep.objects.cartesian_path import CartesianPath
-import numpy as np
-import math, time
 from pyrep.backend import vrep
 from gym import Env
 from gym.spaces import Discrete, MultiDiscrete, MultiBinary, Box
 from matplotlib import pyplot as plt
-from sklearn.preprocessing import MinMaxScaler
 
 SCENE_FILE = '/home/pbustos/software/vrep-simulator/pollos/pollos.ttt'
-#SCENE_FILE = '/home/pbustos/software/vrep-simulator/pollos/pollos-ganchos-succion.ttt'
 
 class EnvPollos(Env):
     def __init__(self, ep_length=100):
@@ -26,51 +25,42 @@ class EnvPollos(Env):
         :param dim: (int) the size of the dimensions you want to learn
         :param ep_length: (int) the length of each episodes in timesteps
         """
-        self.vrep = vrep
         logging.basicConfig(level=logging.DEBUG)
-        # they have to be simmetric. We interpret actions as angular increments 
-        #self.action_space = Box(low=np.array([-0.1, -1.7, -2.5, -1.5, 0.0, 0.0]), 
-        #                        high=np.array([0.1, 1.7, 2.5, 1.5, 0.0, 0.0]))
-        inc = 0.1
-        self.action_space = Box(low=np.array([-inc, -inc, -inc, -inc, 0, -inc]), 
-                                high=np.array([inc, inc, inc, inc, 0, inc]))
-       
-        self.observation_space = Box(low=np.array([-0.5, 0.0, -0.2]), 
-                                     high=np.array([0.5, 1.0, 1.0]))
         
         #
         self.pr = PyRep()
         self.pr.launch(SCENE_FILE, headless=False)
         self.pr.start()
         self.agent = UR10()
-        self.agent.max_velocity = 2
+        self.agent.max_velocity = 0.8
         self.agent.set_control_loop_enabled(True)
-        self.agent.set_motor_locked_at_zero_velocity(True)
+        #self.agent.set_motor_locked_at_zero_velocity(True)
+        
+        self.MAX_INC = 0.2
         self.joints = [Joint('UR10_joint1'), Joint('UR10_joint2'), Joint('UR10_joint3'), Joint('UR10_joint4'), Joint('UR10_joint5'), Joint('UR10_joint6')]
         #self.joints_limits = [[j.get_joint_interval()[1][0],j.get_joint_interval()[1][0]+j.get_joint_interval()[1][1]] 
         #                      for j in self.joints]
         self.high_joints_limits = [0.1, 1.7, 2.7, 0.0, 0.02, 0.3]
         self.low_joints_limits = [-0.1, -0.2, 0.0, -1.5, -0.02, -0.5]                             
-        #self.agent_hand = Shape('hand')
+        self.initial_joint_positions = self.agent.get_joint_positions()
         
+        self.agent_hand = Shape('hand')
         self.initial_agent_tip_position = self.agent.get_tip().get_position()
         self.initial_agent_tip_quaternion = self.agent.get_tip().get_quaternion()
-        self.initial_agent_tip_euler = self.agent.get_tip().get_orientation()
+
         self.target = Dummy('UR10_target')
-        self.initial_target_orientation = self.target.get_orientation()
-        self.initial_joint_positions = self.agent.get_joint_positions()
+
         self.pollo_target = Dummy('pollo_target')
         self.pollo = Shape('pollo')
-        #self.table_target = Dummy('table_target')
         self.initial_pollo_position = self.pollo.get_position()
         self.initial_pollo_orientation = self.pollo.get_quaternion()
-        #self.table_target = Dummy('table_target')
 
-        #self.succion = Shape('suctionPad')
+        self.table_target = Dummy('table_target')
+        self.table_target = Dummy('table_target')
 
-        # objects
-        #self.scene_objects = [Shape('table0'), Shape('Plane'), Shape('Plane0'), Shape('ConcretBlock')]
-        #self.agent_tip = self.agent.get_tip()
+        # objects to check collisions
+        self.scene_objects = [Shape('table0'), Shape('Plane'), Shape('Plane0'), Shape('ConcretBlock')]
+        
         self.initial_distance = np.linalg.norm(np.array(self.initial_pollo_position)-np.array(self.initial_agent_tip_position))
         
         # camera 
@@ -99,67 +89,33 @@ class EnvPollos(Env):
             a = self.agent.get_joint_velocities()
             if not np.any(np.where( np.fabs(a) < 0.1, False, True )):
                 break
-        # a los dos mil reset hay que recargar el ROBOT porque se descoyunta
-        #if self.num_resets > 2000:
-
+        
         return self._get_state()
 
     def step(self, action): 
         if action is None:
-            self.pr.step()
-            return self._get_state(), 0.0, False, {}
+            print(self.total_reward)
+            return self._get_state(), -10.0, True, {}
         
         # check for nan
         if np.any(np.isnan(action)):
-            print(action)
-            return self._get_state(), -1.0, False, {}
-
-        # action[1] = np.interp(action[1], [-1,7,1.7], [-0.2,1.7])
-        # action[2] = np.interp(action[2], [-2.5,2.5], [0,2.5])
-        # action[3] = np.interp(action[3], [-1.5,1.5], [-1.5,0])
-        
-        # add actions as increments to current joints value
-        new_joints = np.array(self.agent.get_joint_positions()) + np.array(action)
-        
-        # check limits
-        if np.any(np.greater(new_joints, self.high_joints_limits)) or np.any(np.less(new_joints, self.low_joints_limits)):
-            logging.debug("New joints value out of limits r=-10")
-            return self._get_state(), -10.0, True, {}   
-        
-        # move the robot and wait to stop
-        self.agent.set_joint_target_positions(new_joints)
-        reloj = time.time()
-        while True:         # wait for arm to stop
-            self.pr.step()  # Step the physics simulation
-            a = self.agent.get_joint_velocities()
-            if not np.any(np.where( np.fabs(a) < 0.1, False, True )) or (time.time()-reloj) > 3:
-                break
-
-        # compute relevant magnitudes
-        np_pollo_target = np.array(self.pollo_target.get_position())
-        np_robot_tip_position = np.array(self.agent.get_tip().get_position())
-        dist = np.linalg.norm(np_pollo_target-np_robot_tip_position)
-        altura = np.clip((np_pollo_target[2] - self.initial_pollo_position[2]), 0, 0.5)
-        
-        for obj in self.scene_objects:                         # colisión con la mesa
-            if self.agent_hand.check_collision(obj):
-                logging.debug("Collision with objects r=-10")
-                return self._get_state(), -10.0, True, {}      
-        if altura > 0.3:                                       # pollo en mano
-            logging.debug("Height reached !!! r=0")
-            return self._get_state(), 30.0, True, {}
-        elif dist > self.initial_distance:                     # mano se aleja
-            logging.debug("Hand moving away from chicken r=-10")
+            print("NAN values ", action)
+            self.NANS_COMING = True
             return self._get_state(), -10.0, True, {}
-        if time.time() - self.initial_epoch_time > 5:          # too much time
-            logging.debug("Time out. End of epoch r=-10")
+
+        # check for strange values
+        # if np.any(np.greater(action, self.MAX_INC)) or np.any(np.less(action, -self.MAX_INC)):
+        #     print("Strange values ", action)
+        #     self.NANS_COMING = True
+        #     return self._get_state(), -10.0, True, {}
+
+        # check for NAN in VREP get_position() 
+        if np.any(np.isnan(self.agent.get_tip().get_position())):
+            print("NAN values in get_position()", action, self.agent.get_tip().get_position())
             return self._get_state(), -10.0, True, {}
-        
-        # Reward 
-        #pollo_height = np.exp(-altura*20)  # para 0.3m pollo_height = 0.002, para 0m pollo_height = 1
-        reward = altura - dist
-        logging.debug("New joints value out of limits r=-10")
-        return self._get_state(), reward, False, {}
+
+        self.pr.step()
+        return self._get_state(), 0, True, {}
 
     def close(self):
         self.pr.stop()
