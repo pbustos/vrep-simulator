@@ -67,6 +67,7 @@ class EnvPollos(Env):
         #self.table_target = Dummy('table_target')
 
         #self.succion = Shape('suctionPad')
+        self.waypoints = [Dummy('dummy_gancho%d' % i) for i in range(4)]
 
         # objects
         #self.scene_objects = [Shape('table0'), Shape('Plane'), Shape('Plane0'), Shape('ConcretBlock')]

@@ -2,16 +2,14 @@ import numpy as np
 import time, math
 from pynput.keyboard import Key, Listener
 from pyrep.objects.cartesian_path import CartesianPath
+from pyrep.objects.dummy import Dummy
 from environment import EnvPollos
 
 class Agent(object):
     state = "WAIT_FOR_CHICKEN"
-    state = "HANGUP"
-    
     reloj = time.time()
     epochs = 0
-    waypoints = [Dummy("Gancho")]
-
+   
     # simple state machine
     def act(self, env):
 
@@ -34,10 +32,8 @@ class Agent(object):
             return(self.wait(env))
         elif self.state == "RESET_EPISODE":
             return(self.resetEpisode(env))
-    
-    def hangup(self, env):
-        path = env.agent.get_path(position=env.waypoints[0].get_position(),
-                                      quaternion=env.waypoints[0].get_quaternion())
+        elif self.state == "IDLE":
+            pass
 
     def wait_for_chicken(self, env):
         if time.time() - self.reloj > 5:
@@ -95,11 +91,31 @@ class Agent(object):
             env.agent.joints[5].set_joint_target_position(angles[5])
             
             self.reloj = time.time()
-            self.state = "WAIT"
+            self.state = "HANGUP"
             self.path.remove()
             
+    def hangup(self, env):
+        local_path = CartesianPath.create(show_line = True, show_orientation = True,
+                                          show_position = True, automatic_orientation = False)                    
+        local_path.insert_control_points([env.waypoints[0].get_position() + env.waypoints[0].get_orientation()])
+        local_path.insert_control_points([env.waypoints[1].get_position() + env.waypoints[1].get_orientation()])             
+        local_path.insert_control_points([env.waypoints[2].get_position() + env.waypoints[2].get_orientation()])       
+        local_path.insert_control_points([env.waypoints[3].get_position() + env.waypoints[3].get_orientation()])       
+                       
+        local_path.insert_control_points([list(self.np_robot_tip_position) + list(self.np_robot_tip_orientation)])
+        local_ang_path = env.agent.get_path_from_cartesian_path(local_path)
+        local_ang_path.visualize()  # Let's see what the path looks like
+        print('Executing plan ...')
+        while not local_ang_path.step():
+            env.pr.step()
+        local_path.remove()
+        # path = env.agent.get_path(position=env.waypoints[0].get_position(),
+        #                           quaternion=env.waypoints[0].get_quaternion())
+        local_ang_path.clear_visualization()
+        self.state = "IDLE"
+    
     def wait(self, env):
-        if time.time() - self.reloj > 2:
+        if time.time() - self.reloj > 5:
             self.state = "RESET_EPISODE"
 
     def resetEpisode(self, env):
