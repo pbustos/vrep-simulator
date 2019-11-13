@@ -38,34 +38,26 @@ class Agent(object):
     def wait_for_chicken(self, env):
         if time.time() - self.reloj > 5:
             self.state = "RESET_EPISODE"
-        if self.dist < 0.45:
+        if self.dist < 0.30:
             self.state = "INIT_GRAB"
         else:
             local_path = CartesianPath.create(show_line = True, show_orientation = True,
                                             show_position = True, automatic_orientation = True)   # first point is lasy to execute
             np_local_tip = self.np_robot_tip_position
             np_local_tip[0] = self.np_pollo_target[0]
-            local_path.insert_control_points([list(np_local_tip) + list(self.np_robot_tip_orientation)])
+            #local_path.insert_control_points([list(np_local_tip) + list(self.np_robot_tip_orientation)])
+            local_path.insert_control_points([list(np_local_tip) + env.pollo_target.get_orientation()])
             local_path.insert_control_points([list(self.np_robot_tip_position) + list(self.np_robot_tip_orientation)])
             local_ang_path = env.agent.get_path_from_cartesian_path(local_path)
-            local_ang_path.step()
-            angles = env.agent.get_joint_positions()
-            env.agent.joints[4].set_joint_target_position(env.pollo_target.get_orientation()[1])
+            while not local_ang_path.step():
+                env.pr.step()
+            #angles = env.agent.get_joint_positions()
+            #env.agent.joints[4].set_joint_target_position(env.pollo_target.get_orientation()[1])
             local_path.remove()
-            
-            # check new distance between tip and new pos
-            #if np.fabs(self.np_robot_tip_position[0] - self.np_pollo_target[0]) > 0.1:
-            #    self.np_robot_tip_position[0] = self.np_pollo_target[0]
-            #else:
-            #    self.np_robot_tip_position[0] = self.np_pollo_target[0]
-            #angles = env.agent.solve_ik(position=list(self.np_robot_tip_position), quaternion=env.initial_agent_tip_quaternion)
-            #y_angle = env.pollo_target.get_orientation()[1]
-            #angles[4] = y_angle
-            #env.agent.set_joint_positions(angles)
     
     def init_grab(self, env):
         self.path = CartesianPath.create(show_line = True, show_orientation = True,
-                                    show_position = True, automatic_orientation = True, 
+                                    show_position = True, automatic_orientation = False, 
                                     keep_x_up = False)   # first point is lasy to execute
         np_elevated_final_point = np.add(self.np_pollo_target, np.array([0.0,0.0,0.30]))
         self.path.insert_control_points([list(np_elevated_final_point) + list(self.np_robot_tip_orientation)])
@@ -112,7 +104,7 @@ class Agent(object):
         # path = env.agent.get_path(position=env.waypoints[0].get_position(),
         #                           quaternion=env.waypoints[0].get_quaternion())
         local_ang_path.clear_visualization()
-        self.state = "IDLE"
+        self.state = "WAIT"
     
     def wait(self, env):
         if time.time() - self.reloj > 5:

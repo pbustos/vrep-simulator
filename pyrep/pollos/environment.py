@@ -43,7 +43,7 @@ class EnvPollos(Env):
         self.pr.launch(SCENE_FILE, headless=False)
         self.pr.start()
         self.agent = UR10()
-        self.agent.max_velocity = 2
+        self.agent.max_velocity = 1
         self.agent.set_control_loop_enabled(True)
         self.agent.set_motor_locked_at_zero_velocity(True)
         self.joints = [Joint('UR10_joint1'), Joint('UR10_joint2'), Joint('UR10_joint3'), Joint('UR10_joint4'), Joint('UR10_joint5'), Joint('UR10_joint6')]
