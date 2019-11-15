@@ -100,9 +100,7 @@ class EnvPollos(Env):
             a = self.agent.get_joint_velocities()
             if not np.any(np.where( np.fabs(a) < 0.1, False, True )):
                 break
-        # a los dos mil reset hay que recargar el ROBOT porque se descoyunta
-        #if self.num_resets > 2000:
-
+        print("ENV RESET DONE")
         return self._get_state()
 
     def step(self, action): 
